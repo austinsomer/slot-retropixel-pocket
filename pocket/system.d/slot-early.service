@@ -1,0 +1,8 @@
+[Unit]
+Description=Start Slot early
+After=basic.target storage-roms.mount
+Requires=storage-roms.mount
+
+[Service]
+Type=oneshot
+ExecStart=/storage/roms/slot/System/pocket-early.sh

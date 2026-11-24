@@ -97,8 +97,20 @@ pub fn core_for_platform(root: &Path, stem: &str, platform: Platform, gb_core: C
             Platform::Gb | Platform::Gbc if gb_core.runs(platform) => gb_core,
             #[cfg(feature = "nds")]
             Platform::Nds => Core::Dsperate,
+            Platform::Gba | Platform::Gbav => default_gba_core(),
             _ => Core::Mgba,
         })
+}
+
+/// mGBA unless SLOT_GBA_CORE names another GBA core: the RetroPixel Pocket's launcher sets
+/// gpsp, since mGBA can't hold full speed on its RK3326.
+fn default_gba_core() -> Core {
+    std::env::var("SLOT_GBA_CORE")
+        .ok()
+        .as_deref()
+        .and_then(Core::parse)
+        .filter(|c| c.runs(Platform::Gba))
+        .unwrap_or(Core::Mgba)
 }
 
 pub fn write_selected_core(

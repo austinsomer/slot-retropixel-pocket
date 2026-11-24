@@ -681,6 +681,10 @@ mod device {
     }
 
     pub fn ble() -> Box<dyn Ble> {
+        // No Bluetooth on the RetroPixel Pocket, and no link play to invite to.
+        if std::env::var("SLOT_DEVICE").as_deref() == Ok("rppocket") {
+            return Box::new(super::NoBle);
+        }
         let (tx, rx) = channel();
         let heard: Queue = Arc::new(Mutex::new(VecDeque::new()));
         let theirs = heard.clone();

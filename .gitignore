@@ -30,3 +30,9 @@
 .superpowers/
 /.task/
 /target-check
+
+# RetroPixel Pocket port: build output
+/target-pocket
+/target-test
+/target-device
+/build-*.log

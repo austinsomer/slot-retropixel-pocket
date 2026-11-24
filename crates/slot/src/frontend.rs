@@ -2165,6 +2165,17 @@ fn sync_game_bezel(app: &mut App, compositor: &mut Compositor, state: &mut Bezel
                 })
                 .and_then(|path| game_bezel_face(&path, w, h)),
         };
+        eprintln!(
+            "slot: game bezel {:?} at {}x{}: {}",
+            shown.1,
+            w,
+            h,
+            if rgba.is_some() { "loaded" } else { "none" }
+        );
+        app.set_bezel_hole(
+            rgba.as_deref()
+                .and_then(|rgba| crate::app::bezel_hole(rgba, (w, h))),
+        );
         app.set_bezel_column(
             rgba.as_deref()
                 .map(|rgba| slot_gfx::bezel_column(rgba, (w, h)))

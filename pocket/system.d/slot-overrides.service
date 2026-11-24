@@ -1,0 +1,11 @@
+[Unit]
+Description=Slot early-boot overrides (splash, single audio level)
+DefaultDependencies=no
+After=storage.mount local-fs.target systemd-udev-trigger.service
+Requires=storage.mount
+Before=amberelec-autostart.service slot-early.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/storage/.config/slot-overrides.sh

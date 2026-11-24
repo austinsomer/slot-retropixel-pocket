@@ -52,6 +52,8 @@ pub enum UpdateFail {
     Bad,
     Space,
     Rejected(String),
+    /// A port with no release channel (the RetroPixel Pocket): upstream builds don't run on it.
+    Unsupported,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -343,7 +345,8 @@ pub fn wifi_conf(root: &Path) -> bool {
 
 #[cfg(feature = "device")]
 fn host_wifi() -> bool {
-    false
+    // The RetroPixel Pocket's connman keeps its own networks; there is no Config/wifi.conf.
+    std::env::var("SLOT_DEVICE").as_deref() == Ok("rppocket")
 }
 
 #[cfg(not(feature = "device"))]
@@ -356,6 +359,9 @@ pub fn check_with(
     fetch: &mut dyn FnMut(&str) -> Result<Vec<u8>, UpdateFail>,
     running: Running,
 ) -> UpdateEvent {
+    if std::env::var("SLOT_DEVICE").as_deref() == Ok("rppocket") {
+        return UpdateEvent::Failed(UpdateFail::Unsupported);
+    }
     if clock_is_wrong(now_unix) {
         return UpdateEvent::Failed(UpdateFail::Clock);
     }

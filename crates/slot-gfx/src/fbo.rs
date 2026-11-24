@@ -619,3 +619,25 @@ impl Drop for Compositor {
         }
     }
 }
+
+/// The window framebuffer's current contents (what the next swap will show), top row first,
+/// as RGBA. For the debug snapshot hook; call before `swap`.
+pub fn read_screen(window: (u32, u32)) -> Vec<u8> {
+    let (w, h) = window;
+    let stride = w as usize * 4;
+    let mut buf = vec![0u8; stride * h as usize];
+    unsafe {
+        gl::BindFramebuffer(gl::FRAMEBUFFER, 0);
+        gl::PixelStorei(gl::PACK_ALIGNMENT, 1);
+        gl::ReadPixels(
+            0,
+            0,
+            w as i32,
+            h as i32,
+            gl::RGBA,
+            gl::UNSIGNED_BYTE,
+            buf.as_mut_ptr() as *mut std::ffi::c_void,
+        );
+    }
+    buf.chunks_exact(stride).rev().flatten().copied().collect()
+}

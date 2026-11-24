@@ -334,5 +334,9 @@ impl<R: Run> Backend for Wpa<R> {
 }
 
 pub fn device_wifi(root: &Path) -> Wifi {
+    // The Pocket's firmware runs connman; Slot must not drive wpa_supplicant there.
+    if std::env::var("SLOT_DEVICE").as_deref() == Ok("rppocket") {
+        return Wifi::spawn(Box::new(super::system::SystemWifi::default()));
+    }
     Wifi::spawn(Box::new(Wpa::new(System, root.to_path_buf())))
 }

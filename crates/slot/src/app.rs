@@ -763,6 +763,8 @@ pub struct App {
     quick_overlay_faces: [Option<[(TexId, u32, u32); 2]>; 4],
     overlay_cache: std::sync::Mutex<Vec<OverlayScan>>,
     game_bezel: Option<TexId>,
+    /// Transparent hole of the shown whole-screen bezel on a square panel, panel pixels.
+    bezel_hole: Option<[f32; 4]>,
     bezel_column: Vec<u8>,
     in_game_menu: Option<QuickRow>,
     footer: f32,
@@ -988,7 +990,8 @@ fn wallpaper_of_rack(rack: Rack, files: &[String]) -> Option<String> {
         })
 }
 
-const PLACEHOLDER_BEZEL: [f32; 4] = [50.0 / 255.0, 205.0 / 255.0, 50.0 / 255.0, 1.0];
+/// Fill around the game on panels with no bezel layout yet (720x720). Was a lime test colour.
+const PLACEHOLDER_BEZEL: [f32; 4] = [0.0, 0.0, 0.0, 1.0];
 
 pub(crate) fn shift_down(draws: &mut [Draw], dy: f32) {
     if dy == 0.0 {
@@ -1298,6 +1301,7 @@ impl App {
             quick_overlay_faces: [None; 4],
             overlay_cache: std::sync::Mutex::new(Vec::new()),
             game_bezel: None,
+            bezel_hole: None,
             bezel_column: Vec::new(),
             in_game_menu: None,
             footer: 0.0,
@@ -3295,7 +3299,8 @@ impl App {
     }
 
     pub fn bezel_files(&self, platform: Platform) -> Vec<String> {
-        match platform.hardware() == Platform::Gba && !self.framed_panel() {
+        // GBA bezels need a frame around the picture: a 640x480 panel, or a square one.
+        match platform.hardware() == Platform::Gba && !self.framed_panel() && !self.table_panel() {
             true => Vec::new(),
             false => self
                 .root()
@@ -3492,12 +3497,24 @@ impl App {
         self.game_bezel = tex;
     }
 
+    pub fn set_bezel_hole(&mut self, hole: Option<[f32; 4]>) {
+        self.bezel_hole = hole;
+    }
+
     pub fn set_bezel_column(&mut self, column: Vec<u8>) {
         self.bezel_column = column;
     }
 
     pub fn shown_game_bezel(&self) -> Option<TexId> {
-        if self.picture_fills() || self.table_panel() {
+        // Square panels have no built-in bezel art, but a whole-screen bezel file (a 720x720
+        // image with a hole where the game sits) works whatever the picture fills.
+        if self.table_panel() {
+            return match self.resolved_bezel(self.playing_platform()) {
+                BezelPick::File(_) => self.game_bezel,
+                _ => None,
+            };
+        }
+        if self.picture_fills() {
             return None;
         }
         if self.resolved_bezel(self.playing_platform()) == BezelPick::Default
@@ -4182,7 +4199,19 @@ impl App {
 
     pub fn game_layout(&self) -> GameLayout {
         let (sizing, source) = self.picture();
-        self.layout_of(self.playing_platform(), sizing, source)
+        let layout = self.layout_of(self.playing_platform(), sizing, source);
+        // On a square panel a whole-screen bezel decides where the game goes: fit the
+        // picture, at its own aspect, centred in the bezel's hole. Any 720x720 pack lines up.
+        match (self.table_panel(), self.bezel_hole, self.shown_game_bezel()) {
+            (true, Some(hole), Some(_)) if layout.panel => {
+                let (pw, ph) = self.playing_platform().picture();
+                GameLayout {
+                    panel: true,
+                    rect: fit_in_hole(hole, (pw as f32, ph as f32)),
+                }
+            }
+            _ => layout,
+        }
     }
 
     fn layout_of(&self, platform: Platform, sizing: Sizing, source: [f32; 4]) -> GameLayout {
@@ -7545,9 +7574,11 @@ impl App {
 
     pub fn game_bezel_size(&self) -> (u32, u32) {
         let c = self.canvas();
-        match slot_gfx::framed(self.panel) {
-            true => (c.w as u32, c.h as u32),
-            false => (OUT_W, OUT_H),
+        match (slot_gfx::framed(self.panel), self.table_panel()) {
+            (true, _) => (c.w as u32, c.h as u32),
+            // Square panels: a bezel is a whole-screen image with a hole where the game shows.
+            (false, true) => self.panel,
+            (false, false) => (OUT_W, OUT_H),
         }
     }
 
@@ -11064,6 +11095,12 @@ impl App {
         if self.link_active() {
             return self.refuse();
         }
+        // The RetroPixel Pocket's RTL8188EU can't host slotlink's 5 GHz access point, and
+        // driving wpa_supplicant would knock connman (and SSH) off the network.
+        if std::env::var("SLOT_DEVICE").as_deref() == Ok("rppocket") {
+            self.hud.toast(Toast::NoLink, self.now());
+            return;
+        }
         if !self.has_wifi_hardware() {
             self.hud.toast(Toast::NoWifi, self.now());
             return;
@@ -13418,6 +13455,10 @@ impl App {
     }
 
     fn has_saved(&self) -> bool {
+        // The RetroPixel Pocket's connman keeps the saved networks (see update::wifi_conf).
+        if self.wifi_configured() && std::env::var("SLOT_DEVICE").as_deref() == Ok("rppocket") {
+            return true;
+        }
         match &self.wifi {
             Some((w, _, _)) => !w.snapshot().saved.is_empty(),
             None => self.wifi_configured(),
@@ -14537,6 +14578,10 @@ impl App {
                         "Free some space, then try again.",
                     ),
                     UpdateFail::Rejected(why) => ("BaseOS refused the update", why.as_str()),
+                    UpdateFail::Unsupported => (
+                        "No updates on this device",
+                        "This is the RetroPixel Pocket port. Update it from its own build.",
+                    ),
                 };
                 (title.into(), detail.into())
             }
@@ -16394,4 +16439,44 @@ fn bios_of(bios: &[(Core, u32)], core: Core) -> u32 {
     bios.iter()
         .find(|(c, _)| *c == core)
         .map_or(0, |(_, crc)| *crc)
+}
+
+/// The largest rect of aspect `picture` centred in `hole` ([x, y, w, h]), whole pixels.
+/// A hole within 4% of a whole-number scale snaps to it (bezel art usually overlaps the screen
+/// edge by a few pixels, and the bezel is drawn over the game), keeping pixels sharp.
+pub fn fit_in_hole(hole: [f32; 4], picture: (f32, f32)) -> [f32; 4] {
+    let [x, y, w, h] = hole;
+    let exact = (w / picture.0).min(h / picture.1);
+    let whole = exact.round().max(1.0);
+    let scale = match (whole - exact).abs() / exact <= 0.04 {
+        true => whole,
+        false => exact,
+    };
+    let (fw, fh) = ((picture.0 * scale).round(), (picture.1 * scale).round());
+    [
+        (x + (w - fw) / 2.0).round(),
+        (y + (h - fh) / 2.0).round(),
+        fw,
+        fh,
+    ]
+}
+
+/// Bounding box of the (mostly) transparent pixels of a `w`x`h` RGBA bezel: its game hole.
+pub fn bezel_hole(rgba: &[u8], (w, h): (u32, u32)) -> Option<[f32; 4]> {
+    let (w, h) = (w as usize, h as usize);
+    if rgba.len() < w * h * 4 {
+        return None;
+    }
+    let (mut x0, mut y0, mut x1, mut y1) = (w, h, 0, 0);
+    for y in 0..h {
+        for x in 0..w {
+            if rgba[(y * w + x) * 4 + 3] < 40 {
+                x0 = x0.min(x);
+                y0 = y0.min(y);
+                x1 = x1.max(x + 1);
+                y1 = y1.max(y + 1);
+            }
+        }
+    }
+    (x1 > x0 && y1 > y0).then(|| [x0 as f32, y0 as f32, (x1 - x0) as f32, (y1 - y0) as f32])
 }

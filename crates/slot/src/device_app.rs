@@ -174,6 +174,7 @@ pub fn run() {
                 pass.draw_fps(shown, surface.window_size());
             }
         }
+        snapshot_if_asked(surface.window_size());
         let swap = Instant::now();
         let work = swap - began;
         if let Err(e) = surface.swap() {
@@ -364,6 +365,34 @@ fn draw_bottom(
     let swapped = surface.swap();
     surface.select_panel(0)?;
     swapped
+}
+
+/// Debug hook for remote QA: `touch $SLOT_RUN/snap` and the next frame is written, whole
+/// screen with UI and bezel, to `$SLOT_RUN/snap.png`. One stat per frame when idle.
+fn snapshot_if_asked(window: (u32, u32)) {
+    let run = std::env::var_os("SLOT_RUN")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("/run"));
+    let ask = run.join("snap");
+    if !ask.exists() {
+        return;
+    }
+    let _ = std::fs::remove_file(&ask);
+    let rgba = slot_gfx::read_screen(window);
+    let tmp = run.join("snap.png.part");
+    let wrote = std::fs::File::create(&tmp).ok().and_then(|f| {
+        let mut enc = png::Encoder::new(std::io::BufWriter::new(f), window.0, window.1);
+        enc.set_color(png::ColorType::Rgba);
+        enc.set_depth(png::BitDepth::Eight);
+        let mut w = enc.write_header().ok()?;
+        w.write_image_data(&rgba).ok()
+    });
+    match wrote {
+        Some(()) => {
+            let _ = std::fs::rename(&tmp, run.join("snap.png"));
+        }
+        None => eprintln!("slot: snap: could not write {}", tmp.display()),
+    }
 }
 
 fn sync_log_writes() {

@@ -1,0 +1,7 @@
+#!/bin/sh
+# On retropixel-server's PATH only: drop its idle auto-suspend, pass everything else through.
+# The power key still suspends (that goes through systemd-logind, not this wrapper).
+case "$1" in
+suspend) echo "$(date '+%F %T') vendor idle suspend ignored" >> /storage/roms/slot/Logs/boot.log; exit 0 ;;
+esac
+exec /usr/bin/systemctl "$@"

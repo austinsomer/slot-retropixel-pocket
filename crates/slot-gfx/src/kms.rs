@@ -320,7 +320,7 @@ pub struct KmsSurface {
     display: Ptr,
     context: Ptr,
     device: Ptr,
-    outputs: [Output; 2],
+    outputs: Vec<Output>,
     current: usize,
     card: File,
     master: bool,
@@ -370,7 +370,10 @@ struct Atomic {
     left: Box<AtomicU32>,
 }
 
-unsafe fn atomic_for(fd: i32, found: &[Found; 2]) -> Result<Atomic, GfxError> {
+unsafe fn atomic_for(fd: i32, found: &[Found]) -> Result<Atomic, GfxError> {
+    if found.len() != 2 {
+        return Err(GfxError::Context("atomic needs two panels".into()));
+    }
     let api = crate::kms_atomic::AtomicApi::load()?;
     api.enable(fd)?;
     let planes = api.planes(fd);
@@ -415,7 +418,7 @@ struct Found {
     mode: ModeInfo,
 }
 
-unsafe fn find(drm: &Drm, fd: i32) -> Result<[Found; 2], GfxError> {
+unsafe fn find(drm: &Drm, fd: i32) -> Result<Vec<Found>, GfxError> {
     let res = (drm.get_resources)(fd);
     if res.is_null() {
         return Err(GfxError::Context(format!("{CARD}: no drm resources")));
@@ -475,10 +478,65 @@ unsafe fn find(drm: &Drm, fd: i32) -> Result<[Found; 2], GfxError> {
     }
     (drm.free_resources)(res);
     match found {
-        [Some(top), Some(bottom)] => Ok([top, bottom]),
-        [top, _] => Err(GfxError::Context(format!(
-            "{CARD}: no connected DSI-{} with a free crtc",
-            if top.is_none() { 2 } else { 1 }
+        [Some(top), Some(bottom)] => Ok(vec![top, bottom]),
+        [None, Some(only)] | [Some(only), None] => Ok(vec![only]),
+        [None, None] => single(drm, fd),
+    }
+}
+
+/// A one-screen device (RetroPixel Pocket: DSI-1 only, or any other single panel):
+/// the first connected connector with a mode and a usable crtc.
+unsafe fn single(drm: &Drm, fd: i32) -> Result<Vec<Found>, GfxError> {
+    let res = (drm.get_resources)(fd);
+    if res.is_null() {
+        return Err(GfxError::Context(format!("{CARD}: no drm resources")));
+    }
+    let r = &*res;
+    let connectors = std::slice::from_raw_parts(r.connectors, r.count_connectors.max(0) as usize);
+    let crtcs = std::slice::from_raw_parts(r.crtcs, r.count_crtcs.max(0) as usize);
+    let mut out = None;
+    for &cid in connectors {
+        let c = (drm.get_connector)(fd, cid);
+        if c.is_null() {
+            continue;
+        }
+        let conn = &*c;
+        if out.is_none() && conn.connection == CONNECTED && conn.count_modes > 0 {
+            let modes = std::slice::from_raw_parts(conn.modes, conn.count_modes as usize);
+            let kinds: Vec<u32> = modes.iter().map(|m| m.kind).collect();
+            let mode = modes[preferred_mode(&kinds).unwrap_or(0)];
+            let encoders =
+                std::slice::from_raw_parts(conn.encoders, conn.count_encoders.max(0) as usize);
+            for &eid in encoders {
+                let e = (drm.get_encoder)(fd, eid);
+                if e.is_null() {
+                    continue;
+                }
+                let current = if eid == conn.encoder_id {
+                    (*e).crtc_id
+                } else {
+                    0
+                };
+                let crtc = free_crtc(current, (*e).possible_crtcs, crtcs, &[]);
+                (drm.free_encoder)(e);
+                if let Some(crtc) = crtc {
+                    out = Some(Found {
+                        connector: cid,
+                        crtc,
+                        crtc_index: crtcs.iter().position(|&c| c == crtc).unwrap_or(0),
+                        mode,
+                    });
+                    break;
+                }
+            }
+        }
+        (drm.free_connector)(c);
+    }
+    (drm.free_resources)(res);
+    match out {
+        Some(f) => Ok(vec![f]),
+        None => Err(GfxError::Context(format!(
+            "{CARD}: no connected panel with a free crtc"
         ))),
     }
 }
@@ -618,8 +676,6 @@ impl KmsSurface {
                     fbs: Vec::new(),
                 });
             }
-            let bottom = outputs.pop().expect("two outputs");
-            let top = outputs.pop().expect("two outputs");
             let mut surface = KmsSurface {
                 egl,
                 gles,
@@ -628,7 +684,7 @@ impl KmsSurface {
                 display,
                 context,
                 device,
-                outputs: [top, bottom],
+                outputs,
                 current: 0,
                 card,
                 master: false,
@@ -640,12 +696,18 @@ impl KmsSurface {
     }
 
     pub fn select(&mut self, panel: Panel) -> Result<(), GfxError> {
+        if panel.index() >= self.outputs.len() {
+            return Err(GfxError::Context(format!("no panel {panel:?}")));
+        }
         self.current = panel.index();
         self.make_current()
     }
 
     pub fn panel_size(&self, panel: Panel) -> (u32, u32) {
-        self.outputs[panel.index()].size
+        self.outputs
+            .get(panel.index())
+            .unwrap_or(&self.outputs[0])
+            .size
     }
 
     fn take_master(&mut self) {

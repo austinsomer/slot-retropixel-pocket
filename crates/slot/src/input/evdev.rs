@@ -25,6 +25,8 @@ pub enum Keymap {
     #[default]
     BaseOs,
     DsOs,
+    /// FunnyPlaying RetroPixel Pocket (RK3326, "GO-Super Gamepad").
+    Pocket,
 }
 
 impl Keymap {
@@ -36,6 +38,9 @@ impl Keymap {
     }
 
     pub fn of_system() -> Keymap {
+        if crate::baseos::var(SLOT_DEVICE).as_deref() == Some(POCKET) {
+            return Keymap::Pocket;
+        }
         Keymap::from_is_dsos(crate::baseos::var(IS_DSOS).as_deref())
     }
 
@@ -47,6 +52,7 @@ impl Keymap {
         match self {
             Keymap::BaseOs => code_to_btn(code),
             Keymap::DsOs => dsos_code_to_btn(code),
+            Keymap::Pocket => pocket_code_to_btn(code),
         }
     }
 
@@ -119,18 +125,19 @@ impl Keymap {
         let wanted: &[u16] = match self {
             Keymap::BaseOs => &WANTED,
             Keymap::DsOs => &DSOS_WANTED,
+            Keymap::Pocket => &POCKET_WANTED,
         };
         lid || wanted.iter().any(|bit| has_bit(&keys, *bit))
     }
 
     pub fn has_stick(self, target: &str) -> bool {
-        self == Keymap::DsOs || has_left_stick(target)
+        matches!(self, Keymap::DsOs | Keymap::Pocket) || has_left_stick(target)
     }
 
     pub fn stick_axes(self) -> [u16; 2] {
         match self {
             Keymap::BaseOs => [ABS_LSX, ABS_LSY],
-            Keymap::DsOs => [ABS_X, ABS_Y],
+            Keymap::DsOs | Keymap::Pocket => [ABS_X, ABS_Y],
         }
     }
 
@@ -138,11 +145,50 @@ impl Keymap {
         match self {
             Keymap::BaseOs => STICK_DEADZONE,
             Keymap::DsOs => DSOS_STICK_DEADZONE,
+            Keymap::Pocket => POCKET_STICK_DEADZONE,
         }
     }
 }
 
 const IS_DSOS: &str = "IS_DSOS";
+
+/// Set by the Pocket's launcher; that firmware has no /etc/baseos-release.
+const SLOT_DEVICE: &str = "SLOT_DEVICE";
+pub const POCKET: &str = "rppocket";
+
+/// The gamepad advertises ABS_X/Y/RX/RY at -1800..1800.
+pub const POCKET_STICK_DEADZONE: i32 = 600;
+
+/// RetroPixel Pocket gamepad. Face buttons are positional (SOUTH = B, EAST = A, NORTH = X,
+/// WEST = Y), the D-pad is BTN_DPAD_*, and select/start/L3/R3 sit in BTN_TRIGGER_HAPPY1-4.
+/// There are no L2/R2 triggers. The brightness rocker sends HAPPY5 (up) / HAPPY6 (down), which
+/// the firmware's retropixel-server already turns into backlight changes, so Slot ignores them;
+/// its push-in sends TL2, which Slot uses as Menu. The volume rocker drives the speaker amp in
+/// hardware (GPIO 123 up / 116 down only mirror it); its push-in sends TR2, kept as R2.
+pub fn pocket_code_to_btn(code: u16) -> Option<Btn> {
+    Some(match code {
+        0x131 => Btn::A,
+        0x130 => Btn::B,
+        0x133 => Btn::X,
+        0x134 => Btn::Y,
+        0x136 => Btn::L1,
+        0x137 => Btn::R1,
+        0x138 => Btn::Menu,
+        0x139 => Btn::R2,
+        0x220 => Btn::Up,
+        0x221 => Btn::Down,
+        0x222 => Btn::Left,
+        0x223 => Btn::Right,
+        0x2c0 => Btn::Select,
+        0x2c1 => Btn::Start,
+        115 => Btn::VolUp,
+        114 => Btn::VolDown,
+        116 => Btn::Power,
+        _ => return None,
+    })
+}
+
+const POCKET_WANTED: [u16; 4] = [0x130, 0x2c0, 116, 115];
 
 const LEFT_STICK_TARGETS: [&str; 6] = [
     "rg34xxsp",

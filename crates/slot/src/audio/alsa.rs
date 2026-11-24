@@ -85,7 +85,16 @@ impl Alsa {
 
     fn open_pcm(&self, rate: u32, usb: Option<u32>) -> Result<*mut c_void, AudioError> {
         let mut last = AudioError::NoDevice;
-        for name in devices(usb, &DEVICES) {
+        // SLOT_ALSA_DEVICE (the Pocket's launcher sets plughw:0,0) is tried first: there
+        // plug:default goes through a dmix that never recovers from an underrun.
+        let mut names = devices(usb, &DEVICES);
+        if let Ok(first) = std::env::var("SLOT_ALSA_DEVICE") {
+            if usb.is_none() && !first.is_empty() {
+                names.retain(|n| *n != first);
+                names.insert(0, first);
+            }
+        }
+        for name in names {
             let Ok(cname) = CString::new(name.as_str()) else {
                 continue;
             };
@@ -278,10 +287,11 @@ impl Playback {
                 Some(pcm) => {
                     pace.reset();
                     if !self.write(pcm, &buf, ring) {
-                        if self.usb.is_none() {
-                            return;
-                        }
+                        // Reopen rather than give up: on the RetroPixel Pocket's RK817 codec
+                        // snd_pcm_recover's prepare fails with EPIPE after any underrun, and
+                        // returning here left the game silent for the rest of the session.
                         self.release();
+                        eprintln!("slot: audio released after a failed write, reopening");
                     }
                 }
                 None => std::thread::sleep(pace.wait(Instant::now())),

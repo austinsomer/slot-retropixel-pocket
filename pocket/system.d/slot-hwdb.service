@@ -1,0 +1,11 @@
+[Unit]
+Description=Restore cached udev hardware database (replaces systemd-hwdb-update)
+DefaultDependencies=no
+After=systemd-remount-fs.service storage.mount
+Before=systemd-udevd.service systemd-udev-trigger.service sysinit.target
+ConditionPathExists=/storage/.config/slot-hwdb.sh
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/storage/.config/slot-hwdb.sh
