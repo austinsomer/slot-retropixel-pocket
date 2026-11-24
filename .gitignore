@@ -36,3 +36,20 @@
 /target-test
 /target-device
 /build-*.log
+
+# Never commit games or saves (RetroPixel Pocket port). The only exception is upstream's
+# 768-byte test program built from tests/rtc_probe/probe.c.
+*.gb
+*.gbc
+*.gba
+*.agb
+*.nes
+*.sfc
+*.smc
+*.nds
+*.zip
+*.7z
+*.srm
+*.sav
+*.state
+!/crates/slot/tests/rtc_probe/probe.gba
