@@ -1,53 +1,48 @@
-<div align="center">
+# slot. for the RetroPixel Pocket
 
-<img align="top" src=".github/resources/hero.webp" width="100%" alt="slot. A bespoke, Game Boy-centric frontend for the Anbernic RG SP."><br><a href="https://github.com/slot-cfw/slot/releases/latest"><img align="top" src="https://badges.slot-cfw.fyi/release.svg" width="20.7142%" alt="Download"></a><a href="https://slot-cfw.fyi"><img align="top" src=".github/resources/badges/guide.svg" width="19.5238%" alt="Guide"></a><a href="https://discord.gg/NYRWsSuPUu"><img align="top" src=".github/resources/badges/discord.svg" width="19.5238%" alt="Discord"></a><a href="https://github.com/slot-cfw/slot/stargazers"><img align="top" src="https://badges.slot-cfw.fyi/stars.svg" width="19.5238%" alt="Stars"></a><a href="https://github.com/slot-cfw/slot/releases"><img align="top" src="https://badges.slot-cfw.fyi/downloads.svg" width="20.7142%" alt="Downloads"></a>
+This is a fork of [slot.](https://github.com/slot-cfw/slot) by slot-cfw, ported to the FunnyPlaying
+RetroPixel Pocket (2025 revision: RK3326, Mali-G31, 720x720 screen, 1 GB RAM).
 
-</div>
+The original slot. was built for the Anbernic RG SP and other Anbernic handhelds. This fork runs it
+on the Pocket's stock firmware (RetroPixel, an AmberELEC fork) in place of EmulationStation. Wi-Fi
+and SSH keep working, and you can boot back to the stock menu at any time.
 
----
+It's a Game Boy-centric frontend and plays GBA, GBC and GB games only.
 
-# What is slot?
-
-A bespoke, Game Boy-centric frontend for the Anbernic RG SP.
-
-Has support for GBA, GBC, and GB titles only.
+For setup, the files it puts on the device, how to get back to the stock menu and the build/deploy
+scripts, see [pocket/README.md](pocket/README.md). For everything else about slot. itself, see the
+[upstream repo](https://github.com/slot-cfw/slot) and [slot-cfw.fyi](https://slot-cfw.fyi).
 
 ---
 
 # What does it look like?
+
+These screenshots come from upstream, taken on an RG SP. The Pocket uses the same interface on a square 720x720 screen.
 
 <p align="center">
 <img src=".github/resources/screenshots/carousel.gif" width="48%" alt="Scrolling the cart carousel across the Game Boy Advance, Game Boy and Game Boy Color shelves">
 <img src=".github/resources/screenshots/core-picker.gif" width="48%" alt="Flipping a cart to its circuit board to choose mGBA or gpSP">
 </p>
 
-<p align="center">
-<img src=".github/resources/screenshots/link.gif" width="96.5%" alt="Two SPs racing in Mario Kart over the emulated link">
-</p>
-
 ---
 
 # Supported Devices
 
-| Device                | Since Version |
-|-----------------------|---------------|
-| Anbernic RG SP        | Always        |
-| Anbernic RG 34XX      | 1.4.0         |
-| Anbernic RG 34XXSP    | 1.4.0         |
+| Device                                   | Notes                                    |
+|------------------------------------------|------------------------------------------|
+| FunnyPlaying RetroPixel Pocket (2025)    | Runs on the stock RetroPixel firmware    |
 
-## Devices I never wanted to support that slot works on
-
-| Device                | Since Version |
-|-----------------------|---------------|
-| Anbernic RG 35XXSP    | 1.5.0         |
-| Anbernic RG 35XX Plus | 1.5.0         |
-| Anbernic RG 35XX-H    | 1.7.0         |
-| Anbernic RG 35XX Pro  | 1.15.0        |
-| Anbernic RG 28XX      | 1.6.0         |
+The Anbernic devices upstream supports are still in the code, but this fork doesn't test or build
+for them. Use [upstream slot.](https://github.com/slot-cfw/slot/releases/latest) on those.
 
 ---
 
-# AI Disclosure
+# Credits
+
+All credit for slot. goes to its original author and to [Markus](https://github.com/MarkusMaribu) for
+the art. mGBA, gpSP and Gambatte do the emulation. Upstream's notes follow.
+
+## AI Disclosure (upstream)
 
 The Rust frontend, and the SVGs on [slot-cfw.fyi](https://slot-cfw.fyi), were put together by Claude.
 I reviewed everything that was produced. All documentation is 100% free-range, meatbag prose.
@@ -67,7 +62,7 @@ Figured I should share the end result of all the wasted water. ✌🏻
 
 ---
 
-# Spread Joy!
+## Spread Joy! (upstream)
 
 I've spent a lot of time building slot.
 
